@@ -8,11 +8,13 @@
 	# Check for uncommitted changes, and refuse to proceed if there are any
 
 	if [ -n "$(git ls-files . --exclude-standard --others)" ]; then
-		echo "You have untracked files, please remove or commit them before building."
+		echo "You have untracked files, please remove or commit them before building:"
+		git ls-files . --exclude-standard --others
 		exit 0
 	fi
-	if ! git diff --quiet --exit-code; then
-		echo "You have changes to tracked files, please reset or commit them before building."
+	if ! git -c core.fileMode=false diff --quiet --exit-code; then
+		echo "You have changes to tracked files, please reset or commit them before building:"
+		git -c core.fileMode=false diff --shortstat
 		exit 0
 	fi
 
@@ -30,8 +32,8 @@
 	INITIAL=`pwd`
 	# BUILD=`mktemp -d`
 	# PACKAGE=`mktemp -d`
-	# BUILD='/srv/www/tmp.build'
-	# PACKAGE='/srv/www/tmp.package'
+	BUILD='/srv/www/tmp.build'
+	PACKAGE='/srv/www/tmp.package'
 	rm -rf $BUILD
 	rm -rf $PACKAGE
 
@@ -60,31 +62,32 @@
 	# git remote show initial
 
 	# Sequester the key .git stuff, before syncing
-	mv $PACKAGE/.git $PACKAGE/.hiding
-	mv $PACKAGE/.gitignore.build $PACKAGE/.hiding.gitignore.build
+	# mv $PACKAGE/.git $PACKAGE/.hiding
+	# mv $PACKAGE/.gitignore.package $PACKAGE/.hiding.gitignore.package
 	# Get the files under Git, and core, and move them to
 	# the PACKAGE directory
-	rsync -a --exclude "- .hiding*" --exclude "- .git*" --exclude "- .svn/" --delete $BUILD/ $PACKAGE/
+	find $BUILD/htdocs -name ".svn" -exec rm -rf {} \;
+	find $BUILD/htdocs -name ".git*" -exec rm -rf {} \;
+	rm -rf $PACKAGE/*
+	cp -pr $BUILD/htdocs/* $PACKAGE/
 
 	# Remove all version control directories
-	find htdocs -name ".svn" -exec rm -rf {} \;
-	find htdocs -name ".git*" -exec rm -rf {} \;
 
 	# Move our concealed .git stuff back
-	mv $PACKAGE/.hiding $PACKAGE/.git
-	mv $PACKAGE/.hiding.gitignore.build $PACKAGE/.gitignore
+	mv $PACKAGE/.gitignore.package $PACKAGE/.gitignore
 
-	exit
 
 	# Add all the things! Even the deleted things!
 	git add -A .
 
-	pwd
-
 	git commit -am "$PACKAGE_MSG"
-	# Now pull the PACKAGE branch commits back to the initial repo
+
+	# PULL THE BUILD COMMITS BACK INTO THE INITIAL REPO
+
 	cd $INITIAL
 	git checkout build
+	git remote add origin $PACKAGE/.git
+	exit
 	git pull package build
 	# TODO: Save the initial branch, and switch back to it rather than assuming master
 	git checkout master
